@@ -23,12 +23,17 @@ def main():
 
     # Initialize workflow with config
     workflow = CrewWorkflow(config)
-    result = workflow.run(source_code)
+    result, _ = workflow.run(source_code)
 
     print("\n=== FINAL RESULT ===")
-    for task_name, output in result.items():
+
+    # Convert CrewOutput to dict first
+    result_dict = result.dict()  # <-- this is the key fix
+
+    for task_name, output in result_dict.items():
         print(f"\nTask: {task_name}")
         print(output)
+
 
 
 if __name__ == "__main__":
