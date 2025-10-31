@@ -1,17 +1,34 @@
-# Core AI workflow
-crewai==0.148.0
+# === Core dependencies ===
+#crewai==1.2.1
+crewai[google-genai]==1.2.1
+chromadb==1.1.1
+mmh3==5.1.0
+google-generativeai==0.8.3
+google-cloud-aiplatform==1.71.0
 
-# Unit testing
-pytest==8.2.1
+# === Recommended supporting deps (usually pulled in automatically) ===
+# Pinning them helps avoid pip backtracking and slow installs.
 
-# Environment variables
+# Common ChromaDB + CrewAI dependencies
+duckdb==1.1.1
+fastapi==0.115.0
+pydantic==2.11.9
+pydantic-core==2.33.2
+uvicorn==0.32.0
+numpy==2.1.2
+pandas==2.2.3
+requests==2.32.3
+tqdm==4.67.1
+
+# Vector + serialization deps
+sentence-transformers==3.1.1
+hnswlib==0.8.0
+typing-extensions==4.12.2
+
+# Utility deps
+click==8.1.7
 python-dotenv==1.1.1
 
-# Streamlit front-end
-streamlit
 
-# Numerical backend for CrewAI / LangGraph
-numpy>=1.26.4
-
-# Optional: LangGraph if needed
-langgraph>=0.0.14
+# === Streamlit app dependencies ===
+streamlit==1.51.0

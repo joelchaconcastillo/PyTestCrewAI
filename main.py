@@ -1,36 +1,35 @@
 import os
-import asyncio
 from dotenv import load_dotenv
-
-from workflow import run_workflow
-from crewai import LLM
+from crew_workflow.workflow import CrewWorkflow
 
 # Load environment variables
 load_dotenv()
 
-async def main():
-    code_snippet = """
-def divide(a, b):
-    return a / b
-"""
+def main():
+    # Read environment variables (with sane defaults)
+    config = {
+        "gemini_api_key": os.getenv("GEMINI_API_KEY"),
+        "gemini_model": os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash"),
+        "temperature": float(os.getenv("LLM_TEMPERATURE", 0.3)),
+        "max_attempts": int(os.getenv("MAX_ATTEMPTS", 3)),
+        "test_file_prefix": os.getenv("TEST_FILE_PREFIX", "generated_tests/unit_test"),
+    }
 
-    max_attempts = int(os.getenv("MAX_ATTEMPTS", 3))
-    temperature = float(os.getenv("LLM_TEMPERATURE", 0.3))
-    model = os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash")
-    api_key = os.getenv("GEMINI_API_KEY")
+    # Example source code input
+    source_code = """
+    def divide(a, b):
+        return a / b
+    """
 
-    # Configure Gemini 2.5 Flash LLM
-    gemini_llm = LLM(
-        model=model,
-        api_key=api_key,
-        temperature=temperature
-    )
+    # Initialize workflow with config
+    workflow = CrewWorkflow(config)
+    result = workflow.run(source_code)
 
-    # Run the workflow
-    review = await run_workflow(code_snippet, gemini_llm, max_attempts=max_attempts)
+    print("\n=== FINAL RESULT ===")
+    for task_name, output in result.items():
+        print(f"\nTask: {task_name}")
+        print(output)
 
-    print("=== FINAL REVIEW ===")
-    print(review)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
