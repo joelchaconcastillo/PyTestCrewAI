@@ -1,0 +1,17 @@
+# Core AI workflow
+crewai==0.148.0
+
+# Unit testing
+pytest==8.2.1
+
+# Environment variables
+python-dotenv==1.1.1
+
+# Streamlit front-end
+streamlit
+
+# Numerical backend for CrewAI / LangGraph
+numpy>=1.26.4
+
+# Optional: LangGraph if needed
+langgraph>=0.0.14

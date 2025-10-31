@@ -1,0 +1,36 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Virtual environment
+venv/
+.env/
+.env.*
+
+# Streamlit cache
+.streamlit/
+
+# Pytest cache
+.pytest_cache/
+
+# Logs and reports
+*.log
+*.json
+
+# Generated test files
+tests/*.py
+tests/*.json
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# MacOS specific
+.DS_Store
+
