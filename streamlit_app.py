@@ -1,73 +1,53 @@
+import os
+from dotenv import load_dotenv
 import streamlit as st
-import asyncio
-from pathlib import Path
-from dotenv import dotenv_values
-from crewai.llm import LLM
-from workflow import run_workflow  # Your workflow function
+from crew_workflow.workflow import CrewWorkflow
 
-# Load .env config
-config = dotenv_values(".env")
-gemini_api_key = config.get("GEMINI_API_KEY")
-gemini_model = config.get("GEMINI_MODEL", "gemini-2.5-flash")
+# Load environment variables
+load_dotenv()
 
-st.title("PyTestCrew AI")
+# --- Streamlit UI ---
+st.set_page_config(page_title="CrewWorkflow Runner", layout="wide")
+st.title("CrewWorkflow Runner 🌟")
 
-st.write("Generate Pytest unit tests and reviews automatically from a Python snippet!")
+# Sidebar for workflow configuration
+st.sidebar.header("Workflow Configuration")
 
-# User inputs
-code_snippet = st.text_area("Enter Python code snippet", height=200)
-max_attempts = st.number_input("Max retry attempts", min_value=1, max_value=10, value=3)
+max_attempts = st.sidebar.number_input(
+    "Max Attempts", min_value=1, max_value=10, value=int(os.getenv("MAX_ATTEMPTS", 3))
+)
+test_file_prefix = st.sidebar.text_input(
+    "Test File Prefix", value=os.getenv("TEST_FILE_PREFIX", "generated_tests/unit_test")
+)
 
-if st.button("Run Workflow"):
-    if not code_snippet.strip():
-        st.error("Please enter a Python code snippet!")
-    else:
-        with st.spinner("Running workflow..."):
-            # Initialize Gemini LLM
-            gemini_llm = LLM(
-                model=gemini_model,
-                api_key=gemini_api_key,
-                temperature=0
-            )
+st.header("Source Code Input")
+source_code = st.text_area(
+    "Paste your Python source code here:",
+    value="""
+def divide(a, b):
+    return a / b
+""",
+    height=200
+)
 
-            # Run workflow
-            workflow_result = asyncio.run(
-                run_workflow(
-                    code_snippet=code_snippet,
-                    llm=gemini_llm,
-                    max_attempts=max_attempts,
-                    dotfile=".env"
-                )
-            )
+if st.button("Run CrewWorkflow"):
+    # Build full config, including hidden keys/models from environment
+    config = {
+        "gemini_api_key": os.getenv("GEMINI_API_KEY"),
+        "gemini_model": os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash"),
+        "temperature": float(os.getenv("LLM_TEMPERATURE", 0.3)),
+        "max_attempts": max_attempts,
+        "test_file_prefix": test_file_prefix,
+    }
 
-            st.success("Workflow completed!")
+    workflow = CrewWorkflow(config)
+    with st.spinner("Running workflow..."):
+        result = workflow.run(source_code)
 
-            # Display final review
-            st.subheader("Final Review")
-            st.text(workflow_result["review"])
+    st.success("✅ Workflow completed")
 
-            # Retrieve generated test file(s) and review.json from workflow folder
-            test_file_prefix = config.get("TEST_FILE_PREFIX", "tests/test")
-            prefix_path = Path(test_file_prefix)
-            folder = prefix_path.parent
-
-            # Show and offer downloads
-            st.subheader("Generated Files")
-            for file_path in folder.glob(f"{prefix_path.name}_*.py"):
-                st.write(f"**{file_path.name}**")
-                st.download_button(
-                    label="Download Test File",
-                    data=file_path.read_text(),
-                    file_name=file_path.name,
-                    mime="text/plain"
-                )
-
-            review_file = folder / "review.json"
-            if review_file.exists():
-                st.write(f"**{review_file.name}**")
-                st.download_button(
-                    label="Download Review JSON",
-                    data=review_file.read_text(),
-                    file_name=review_file.name,
-                    mime="application/json"
-                )
+    # Convert CrewOutput to dict
+    result_dict = result.dict()  # <- this fixes the AttributeError
+    for task_name, output in result_dict.items():
+        st.subheader(f"Task: {task_name}")
+        st.code(output)

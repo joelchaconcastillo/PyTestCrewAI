@@ -1,26 +1,29 @@
-from crewai import Agent
-from pydantic import Field
+import os
+from utils.test_runner import run_pytest
 
-class ExecutorAgent(Agent):
-    max_attempts: int = Field(default=3, description="Number of retries for failing tests")
 
-    async def run(self, input_data: dict):
-        """
-        input_data: {"tests": list, "code_snippet": str}
-        Executes tests up to max_attempts retries.
-        """
-        tests = input_data.get("tests", [])
-        code_snippet = input_data.get("code_snippet", "")
-        if not isinstance(code_snippet, str):
-            raise TypeError(f"Expected code_snippet to be str, got {type(code_snippet)}")
+class ExecutorAgent:
+    """
+    ExecutorAgent:
+    Executes generated pytest code and captures structured results.
+    """
 
-        results = []
-        for test in tests:
-            attempt = 0
-            success = False
-            while attempt < self.max_attempts and not success:
-                attempt += 1
-                # Placeholder: here you could integrate real pytest execution
-                success = True  # Simulate success
-                results.append({"test": test, "success": success, "attempts": attempt})
-        return results
+    def __init__(self, config, llm):
+        self.config = config
+        self.llm = llm
+        self.test_prefix = config.get("test_file_prefix", "generated_tests/unit_test")
+
+    def __call__(self, test_code: str):
+        os.makedirs(os.path.dirname(self.test_prefix), exist_ok=True)
+        test_file = f"{self.test_prefix}.py"
+
+        with open(test_file, "w") as f:
+            f.write(test_code)
+
+        result = run_pytest(test_file)
+
+        return {
+            "test_file": test_file,
+            "test_results": result,
+            "test_code": test_code,
+        }
