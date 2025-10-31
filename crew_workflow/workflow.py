@@ -1,6 +1,7 @@
+import os
 from crewai import Agent, Task, Crew
 from utils.llm_factory import create_llm
-from utils.test_runner import run_pytest
+#from utils.test_runner import run_pytest
 from utils.lint_checker import check_code_style
 
 
@@ -8,22 +9,23 @@ class CrewWorkflow:
     """
     CrewAI 1.2.1 workflow:
     AnalyzerAgent -> TestWriterAgent -> ExecutorAgent -> ReviewerAgent
-    Tasks are executed via Crew.kickoff() orchestration.
+    Tasks executed via Crew.kickoff()
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, test_file_prefix: str = "test_"):
         self.config = config
         self.llm = create_llm(config)
+        self.test_file_prefix = test_file_prefix
 
         # --- Define Agents ---
         self.analyzer_agent = Agent(
             name="Code Analyzer",
             role="Software Code Analyst",
             goal="Analyze Python source code and extract its structure, functions, classes, and docstrings.",
-            backstory="Understands Python syntax, semantic patterns, and code organization.",
+            backstory="Understands Python syntax, semantics, and structure.",
             instructions=(
-                "You will receive Python source code and must analyze it to identify "
-                "all classes, functions, and docstrings, returning a structured JSON summary."
+                "Analyze the Python source code to identify all classes, functions, and docstrings, "
+                "and return them in structured JSON format."
             ),
             verbose=True,
             llm=self.llm,
@@ -32,11 +34,11 @@ class CrewWorkflow:
         self.writer_agent = Agent(
             name="Test Writer",
             role="Unit Test Generator",
-            goal="Generate pytest-style unit tests for the provided Python code.",
-            backstory="Writes clean, maintainable, and effective pytest tests covering key behaviors.",
+            goal="Generate pytest-style unit tests for the provided code.",
+            backstory="Writes clean, maintainable pytest tests with broad coverage.",
             instructions=(
-                "Using the analysis of the source code, generate pytest-compatible test cases "
-                "that thoroughly cover the discovered functions and classes."
+                "Generate pytest-compatible test cases covering functions, classes, and edge cases "
+                "identified in the analysis."
             ),
             verbose=True,
             llm=self.llm,
@@ -45,12 +47,9 @@ class CrewWorkflow:
         self.executor_agent = Agent(
             name="Executor",
             role="Test Executor",
-            goal="Run pytest-based tests and report the results.",
-            backstory="Executes test suites and gathers pass/fail results and exceptions.",
-            instructions=(
-                "Execute the provided pytest test code and report back the results as JSON. "
-                "Include pass/fail counts and any errors encountered."
-            ),
+            goal="Run pytest-based tests and summarize results.",
+            backstory="Executes pytest and captures pass/fail/error results.",
+            instructions="Execute the provided pytest test code and report structured JSON results.",
             verbose=True,
             llm=self.llm,
         )
@@ -58,27 +57,28 @@ class CrewWorkflow:
         self.reviewer_agent = Agent(
             name="Reviewer",
             role="Test Coverage Reviewer",
-            goal="Review the test execution results and provide improvement recommendations.",
-            backstory="Evaluates test quality, coverage, and identifies missing edge cases.",
+            goal="Review test execution results and suggest improvements.",
+            backstory="Expert in identifying gaps and improving test coverage.",
             instructions=(
-                "Review the test execution results and analysis output. "
-                "Provide feedback on coverage, missing tests, and suggestions for improvement."
+                "Analyze test results and the analyzed code. Suggest missing tests, edge cases, "
+                "and robustness improvements."
             ),
             verbose=True,
             llm=self.llm,
         )
 
-        # --- Define Tasks with prompt templates ---
-        # 1️⃣ Analyze Code
+        # --- Define Tasks ---
         self.analyze_task = Task(
             name="Analyze Source Code",
-            description="Analyze the given source code and extract its functions, classes, and docstrings. This is the code {source_code}",
+            description=(
+                "Analyze the given Python source code: {source_code}. "
+                "Extract its functions, classes, and docstrings as structured JSON."
+            ),
             expected_output="Structured JSON of all identified code elements.",
             agent=self.analyzer_agent,
             input_mapping={"source_code": "source_code"},
         )
 
-        # 2️⃣ Generate Tests
         self.generate_task = Task(
             name="Generate Unit Tests",
             description="Generate pytest-compatible unit tests based on the analysis output.",
@@ -87,25 +87,23 @@ class CrewWorkflow:
             context=[self.analyze_task],
         )
 
-        # 3️⃣ Execute Tests
         self.execute_task = Task(
             name="Execute Unit Tests",
-            description="Run generated pytest tests and collect their results.",
-            expected_output="Dictionary of test outcomes (passed, failed, errors).",
+            description="Run the generated pytest tests and collect results in JSON.",
+            expected_output="Dictionary with passed, failed, and error test lists.",
             agent=self.executor_agent,
             context=[self.generate_task],
         )
 
-        # 4️⃣ Review Results
         self.review_task = Task(
             name="Review Test Results",
-            description="Review execution results and suggest improvements to test coverage.",
-            expected_output="Detailed feedback report with actionable recommendations.",
+            description="Review test results and suggest ways to improve coverage and quality.",
+            expected_output="Feedback report with actionable recommendations.",
             agent=self.reviewer_agent,
             context=[self.execute_task, self.analyze_task],
         )
 
-        # --- Create Crew ---
+        # --- Assemble Crew ---
         self.crew = Crew(
             name="Code Testing Crew",
             agents=[
@@ -123,22 +121,33 @@ class CrewWorkflow:
             verbose=True,
         )
 
-    def run(self, source_code: str):
-        """Run the full multi-agent workflow."""
+    def run(self, source_code: str, output_dir: str = "./tests"):
+        """Run the entire CrewAI workflow and save the generated unit tests."""
         if not source_code or not source_code.strip():
             raise ValueError("❌ Source code input is empty!")
 
+        os.makedirs(output_dir, exist_ok=True)
         print("🚀 Starting CrewAI Workflow (v1.2.1)...")
-        print(source_code)
+
+        # Run Crew
         inputs = {"source_code": source_code}
         result = self.crew.kickoff(inputs=inputs)
 
-        # Retrieve generated test code
-        test_code = getattr(result, "Generate_Unit_Tests", None)
-        if test_code:
-            lint_ok, lint_issues = check_code_style(test_code)
-            if not lint_ok:
-                print(f"⚠️ Lint issues found:\n{lint_issues}")
+        if not self.generate_task.output.raw:
+            print("❌ No test code generated.")
+            return result
+
+        test_code = self.generate_task.output.raw
+
+        # --- Lint & Save ---
+        lint_ok, lint_issues = check_code_style(test_code)
+        if not lint_ok:
+            print(f"⚠️ Lint issues found:\n{lint_issues}")
+
+        file_path = os.path.join(output_dir, f"{self.test_file_prefix}generated.py")
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(test_code)
+        print(f"💾 Unit tests saved to {file_path}")
 
         print("✅ Workflow completed.")
-        return result
+        return result, file_path
